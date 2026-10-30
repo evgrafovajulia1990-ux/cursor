@@ -1,63 +1,33 @@
-name: Archaeology photo corrections
-on:
-  push:
-    branches: [main]
+name: Archaeological photographs test
+on: [push]
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Download corrected archaeological photographs
+      - name: Download real photographs
         shell: bash
         run: |
-          cat > /tmp/correct.py <<'PY'
-          import json,os,re,urllib.parse,urllib.request
+          python3 - <<'PY'
+          import json, urllib.request
           from pathlib import Path
-          queries=json.loads("{\"2\":\"Ninhursag Sumerian goddess relief Mesopotamian\",\"3\":\"Mesopotamian cylinder seal tree serpent\",\"6\":\"Royal Cemetery of Ur excavation Woolley\",\"9\":\"Etemenanki ruins Babylon\",\"11\":\"Mari palace Tell Hariri archaeological site\",\"13\":\"Nuzi cuneiform tablet legal\",\"14\":\"Bab edh Dhra Jordan Bronze Age\",\"15\":\"Mamre Ramat el Khalil ruins Hebron\",\"16\":\"Tell Balata ancient Shechem\",\"17\":\"Tell el Daba archaeology Avaris\",\"19\":\"Shiloh Khirbet Seilun archaeological site\",\"20\":\"Tell el Ful Gibeah Jerusalem\",\"21\":\"Tel Beth Shean archaeological ruins\",\"22\":\"Warren's Shaft Jerusalem water system\",\"23\":\"Megiddo ancient stables archaeology\",\"24\":\"Samaria ivory archaeological inlays\",\"34\":\"Gedaliah seal bulla archaeology\"}")
-          exact=json.loads("{\"18\":\"jericho-excavation.jpg\",\"25\":\"mesha-stele.jpg\",\"26\":\"black-obelisk-jehu.jpg\",\"31\":\"bubastite-portal.jpg\",\"32\":\"siloam-inscription.jpg\",\"36\":\"cyrus-cylinder.jpg\"}")
-          D=Path('corrections');D.mkdir(exist_ok=True)
-          def get(url):
-            return urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MuseumBibleResearch/1.0 research'},),timeout=45)
+          D=Path('targets');D.mkdir(exist_ok=True)
+          q=json.loads("{\"11\":\"https://www.livius.org/site/assets/files/17601/mari_great_royal_palace1.jpg\",\"13\":\"https://cdli.earth/dl/photo/P408916.jpg\",\"14\":\"https://biblical-archaeology.ru/03-jordan/data/bab_edh_dhra/photos/999.jpg\",\"15\":\"https://toldot.com/netcat_files/1855/1197/3f02ae59ea9eb24bd05d49b9cdba679d.jpg\",\"16\":\"https://sbf.custodia.org/sites/default/files/2019-06/sichem_03.jpg\",\"17\":\"https://www.oeaw.ac.at/fileadmin/NEWS/2015/IMG/oeai_oeaw02_OEAI-TeD-Hafenareal.jpg\",\"19\":\"https://biblearchaeology.org/images/Emilys/The-ABR-Shiloh-dig-team-at-work.jpg\",\"20\":\"https://cdn4.picryl.com/photo/1931/01/01/air-views-of-palestine-various-points-of-interest-around-jerusalem-tell-el-640.jpg\",\"21\":\"https://www.megalithic.co.uk/a558/a312/gallery/Middle_East/Israel/betshean-governorhouse.JPG\",\"22\":\"https://upload.wikimedia.org/wikipedia/commons/3/3f/Jerusalem_Warren%27s_Shaft_%282121777520%29.jpg\",\"23\":\"https://www.biblicalarchaeology.org/wp-content/uploads/2025/10/Megiddo-southern-stables-tb032507596-scaled.jpg\",\"24\":\"https://www.metmuseum.org/zh/-/media/images/exhibitions/2014/assyria-to-iberia/blog/phoeniciabible1.jpg?as=1&hash=B39AB2220DD7270CFC0CD2BEF369C1FD&mh=1166&mw=1200&sc_lang=en\",\"34\":\"https://commons.wikimedia.org/wiki/Special:Redirect/file/Seal%20of%20Gedaliah%2C%20Keller%27s%20The%20Bible%20as%20history%20in%20pictures%20Wellcome%20L0005978.jpg?width=1400\"}")
           rows=[]
-          def photo(n,title,url,page,origin):
-            with get(url) as r:body=r.read(9000000)
-            if len(body)<15000 or body[:3]!=b'\xff\xd8\xff' and body[:8]!=b'\x89PNG\r\n\x1a\n':raise ValueError('not image')
-            ext='.jpg' if body[:3]==b'\xff\xd8\xff' else '.png'
-            (D/(f'{n:02d}'+ext)).write_bytes(body)
-            return dict(n=n,filename=f'{n:02d}'+ext,title=title,url=url,source_page=page,bytes=len(body),origin=origin)
-          for key,q in queries.items():
-            n=int(key);found=None
-            terms=[q, q.replace(' archaeology',''),q.split(' ')[0]+' archaeology']
-            for term in terms:
-              params={'action':'query','generator':'search','gsrsearch':term,'gsrnamespace':6,'gsrlimit':35,'prop':'imageinfo','iiprop':'url|size','iiurlwidth':1200,'format':'json','formatversion':2}
-              try:
-                with get('https://commons.wikimedia.org/w/api.php?'+urllib.parse.urlencode(params)) as r:dat=json.load(r)
-                pages=sorted(dat.get('query',{}).get('pages',[]),key=lambda p:p.get('index',99))
-                for p in pages:
-                  title=p.get('title','')
-                  if not re.search(r'\.(jpg|jpeg|png)$',title,re.I):continue
-                  if any(x in title.lower() for x in ['history of','the book','quarterly','text book','album','sketch','diagram','schematic','plan ', 'map ','flag of']):continue
-                  ii=(p.get('imageinfo') or [{}])[0]
-                  if ii.get('width',0)<450 or ii.get('height',0)<300:continue
-                  u=ii.get('thumburl') or ii.get('url')
-                  if not u:continue
-                  try:
-                    found=photo(n,title,u,ii.get('descriptionurl',''),'Wikimedia Commons');break
-                  except Exception:pass
-                if found:break
-              except Exception as e:print(n,str(e)[:90],flush=True)
-            if found: rows.append(found);print('OK',n,found['title'],flush=True)
-            else:print('MISS',n,q,flush=True)
-          for key,name in exact.items():
-            n=int(key)
-            u='https://raw.githubusercontent.com/ding0t/bible_studies/main/docs/content/assets/img/archaeology/'+name
-            try:
-              row=photo(n,name,u,'https://github.com/ding0t/bible_studies/blob/main/docs/content/assets/img/archaeology/'+name,'verified archived image');rows.append(row);print('EXACT',n,flush=True)
-            except Exception as e:print('EXACT MISS',n,e,flush=True)
-          (D/'sources.json').write_text(json.dumps(rows,indent=2,ensure_ascii=False),encoding='utf-8')
+          for k,u in q.items():
+           n=int(k)
+           try:
+            with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=14) as r: b=r.read(8000000)
+            assert len(b)>15000 and (b[:3]==bytes.fromhex('ffd8ff') or b[:8]==bytes.fromhex('89504e470d0a1a0a'))
+            ext='.jpg' if b[:3]==bytes.fromhex('ffd8ff') else '.png'
+            f=D/(str(n).zfill(2)+ext);f.write_bytes(b)
+            rows.append(dict(n=n,file=f.name,url=u,bytes=len(b)))
+            print('SUCCESS',n,len(b),flush=True)
+           except Exception as e:print('FAILED',n,str(e)[:70],flush=True)
+          (D/'sources.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
+          
           PY
-          python /tmp/correct.py
       - uses: actions/upload-artifact@v4
         with:
-          name: archaeology-corrected
-          path: corrections/
+          name: archaeology-site-photos
+          path: targets/
           retention-days: 1
