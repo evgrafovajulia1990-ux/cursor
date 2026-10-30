@@ -1,4 +1,4 @@
-name: Archaeology photos verified
+name: Archaeology photo corrections
 on:
   push:
     branches: [main]
@@ -6,72 +6,58 @@ jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch archival photographs and file metadata
+      - name: Download corrected archaeological photographs
         shell: bash
         run: |
-          cat > /tmp/fetch.py <<'PY'
-          import json,os,re,time,urllib.parse,urllib.request,random
+          cat > /tmp/correct.py <<'PY'
+          import json,os,re,urllib.parse,urllib.request
           from pathlib import Path
-          D=Path('photos');D.mkdir(exist_ok=True)
-          queries=[
-          (1,'Enuma Elish tablet British Museum'),(2,'Enki Ninhursag cuneiform tablet Sumerian'),(3,'Mesopotamian cylinder seal tree serpent seated'),(4,'Weld Blundell Prism Sumerian King List'),(5,'Gilgamesh flood tablet British Museum'),(6,'Ur Woolley flood pit excavation'),(7,'Mount Ararat Turkey'),(8,'Noah mausoleum Nakhchivan Azerbaijan'),
-          (9,'Etemenanki ziggurat Babylon ruins'),(10,'Ziggurat Ur Iraq'),(11,'Mari royal palace Syria ruins'),(12,'Beni Hasan Khnumhotep Asiatic procession'),(13,'Nuzi tablet cuneiform'),(14,'Bab edh Dhra Jordan excavation'),(15,'Mamre Hebron archaeological remains'),(16,'Tell Balata Shechem archaeological ruins'),
-          (17,'Tell el Daba Avaris Egypt archaeology'),(18,'Jericho Tell es Sultan excavations'),(19,'Shiloh Khirbet Seilun excavations'),(20,'Tell el Ful Jerusalem ruins'),(21,'Beth Shean archaeological Tel'),(22,'Warrens shaft Jerusalem archaeological'),(23,'Megiddo ancient stables excavation'),(24,'Samaria ivory fragments museum'),
-          (25,'Mesha Stele Louvre'),(26,'Black Obelisk Shalmaneser III Jehu'),(27,'Tiglath Pileser III cuneiform relief'),(28,'Tiglath Pileser III relief inscription'),(29,'Sargon II Khorsabad palace relief'),(30,'Tell en Nasbeh Mizpah wall excavation'),(31,'Shoshenq Bubastite portal Karnak'),(32,'Siloam Inscription Jerusalem Istanbul'),(33,'Jehoiachin ration tablet Babylon cuneiform'),(34,'Gedaliah bulla seal clay'),(35,'Nabonidus Chronicle tablet British Museum'),(36,'Cyrus Cylinder British Museum')]
-          fall={
-          5:'Gilgamesh flood tablet',10:'Ziggurat of Ur',18:'Jericho excavations',25:'Mesha Stele',26:'Black Obelisk of Shalmaneser III',32:'Siloam inscription',36:'Cyrus Cylinder'}
-          fallback_github={
-          12:'amarna-letter-gezer.jpg',16:'gezer-gate.jpg',18:'jericho-excavation.jpg',19:'gezer-gate.jpg',21:'hazor.jpg',22:'city-of-david-stepped-stone.jpg',23:'megiddo-aerial.jpg',25:'mesha-stele.jpg',26:'black-obelisk-jehu.jpg',29:'kurkh-monolith.jpg',31:'bubastite-portal.jpg',32:'siloam-inscription.jpg',33:'babylonian-chronicle-jerusalem.jpg',35:'babylonian-chronicle-jerusalem.jpg',36:'cyrus-cylinder.jpg'}
-          ua='MuseumBibleStudy/1.0 (archaeological image research; contact: info@example.org)'
-          def request(url,timeout=40):
-            req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'application/json,image/*;q=0.9,*/*;q=0.8'})
-            return urllib.request.urlopen(req,timeout=timeout)
-          def commons(query):
-            params={'action':'query','generator':'search','gsrsearch':query,'gsrnamespace':6,'gsrlimit':16,'prop':'imageinfo','iiprop':'url|extmetadata|size','iiurlwidth':1200,'format':'json','formatversion':2}
-            dat=json.load(request('https://commons.wikimedia.org/w/api.php?'+urllib.parse.urlencode(params)))
-            pages=sorted(dat.get('query',{}).get('pages',[]),key=lambda p:p.get('index',99))
-            for p in pages:
-              ii=(p.get('imageinfo') or [{}])[0]
-              u=ii.get('thumburl') or ii.get('url') or ''
-              name=p.get('title','')
-              if not re.search(r'\.(jpg|jpeg|png|webp)(?:\?|$)',u,re.I): continue
-              if any(s in name.lower() for s in ['icon','logo','locator map','coat of arms','flag of','diagram','plan of']):continue
-              if ii.get('width',0)<400 or ii.get('height',0)<300:continue
-              return name,u,ii.get('descriptionurl',''),ii.get('extmetadata',{})
-            return None
-          metadata=[]
-          for n,q in queries:
-            row={'n':n,'query':q,'status':'missing'}
-            candidates=[]
-            for term in (q,fall.get(n)):
-              if not term:continue
+          queries=json.loads("{\"2\":\"Ninhursag Sumerian goddess relief Mesopotamian\",\"3\":\"Mesopotamian cylinder seal tree serpent\",\"6\":\"Royal Cemetery of Ur excavation Woolley\",\"9\":\"Etemenanki ruins Babylon\",\"11\":\"Mari palace Tell Hariri archaeological site\",\"13\":\"Nuzi cuneiform tablet legal\",\"14\":\"Bab edh Dhra Jordan Bronze Age\",\"15\":\"Mamre Ramat el Khalil ruins Hebron\",\"16\":\"Tell Balata ancient Shechem\",\"17\":\"Tell el Daba archaeology Avaris\",\"19\":\"Shiloh Khirbet Seilun archaeological site\",\"20\":\"Tell el Ful Gibeah Jerusalem\",\"21\":\"Tel Beth Shean archaeological ruins\",\"22\":\"Warren's Shaft Jerusalem water system\",\"23\":\"Megiddo ancient stables archaeology\",\"24\":\"Samaria ivory archaeological inlays\",\"34\":\"Gedaliah seal bulla archaeology\"}")
+          exact=json.loads("{\"18\":\"jericho-excavation.jpg\",\"25\":\"mesha-stele.jpg\",\"26\":\"black-obelisk-jehu.jpg\",\"31\":\"bubastite-portal.jpg\",\"32\":\"siloam-inscription.jpg\",\"36\":\"cyrus-cylinder.jpg\"}")
+          D=Path('corrections');D.mkdir(exist_ok=True)
+          def get(url):
+            return urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'MuseumBibleResearch/1.0 research'},),timeout=45)
+          rows=[]
+          def photo(n,title,url,page,origin):
+            with get(url) as r:body=r.read(9000000)
+            if len(body)<15000 or body[:3]!=b'\xff\xd8\xff' and body[:8]!=b'\x89PNG\r\n\x1a\n':raise ValueError('not image')
+            ext='.jpg' if body[:3]==b'\xff\xd8\xff' else '.png'
+            (D/(f'{n:02d}'+ext)).write_bytes(body)
+            return dict(n=n,filename=f'{n:02d}'+ext,title=title,url=url,source_page=page,bytes=len(body),origin=origin)
+          for key,q in queries.items():
+            n=int(key);found=None
+            terms=[q, q.replace(' archaeology',''),q.split(' ')[0]+' archaeology']
+            for term in terms:
+              params={'action':'query','generator':'search','gsrsearch':term,'gsrnamespace':6,'gsrlimit':35,'prop':'imageinfo','iiprop':'url|size','iiurlwidth':1200,'format':'json','formatversion':2}
               try:
-                c=commons(term)
-                if c: candidates.append(('commons',c))
-              except Exception as e:row['commons_error']=str(e)[:160]
-            if n in fallback_github:
-              candidates.append(('github',(fallback_github[n],'https://raw.githubusercontent.com/ding0t/bible_studies/main/docs/content/assets/img/archaeology/'+fallback_github[n],'https://github.com/ding0t/bible_studies/blob/main/docs/content/assets/img/archaeology/'+fallback_github[n],{})))
-            for origin,c in candidates:
-              title,url,page,em=c
-              try:
-                with request(url,60) as r:
-                  data=r.read(12_000_000)
-                  mim=r.headers.get('Content-Type','')
-                if len(data)<15000 or not (data[:3]==b'\xff\xd8\xff' or data[:8]==b'\x89PNG\r\n\x1a\n' or data[:4]==b'RIFF'):continue
-                ext='.jpg' if data[:3]==b'\xff\xd8\xff' else '.png' if data[:8]==b'\x89PNG\r\n\x1a\n' else '.webp'
-                f=D/('%02d'%n+ext);f.write_bytes(data)
-                row.update(status='downloaded',name=title,file=f.name,source_page=page,source_image=url,bytes=len(data),origin=origin,license=re.sub('<[^>]+>','',(em.get('LicenseShortName') or {}).get('value','')),artist=re.sub('<[^>]+>','',(em.get('Artist') or {}).get('value',''))[:200])
-                break
-              except Exception as e: row['download_error']=str(e)[:180]
-            if row['status']=='missing':print('MISSING',n,q,row.get('commons_error',''),flush=True)
-            else:print('OK',n,row['name'],row['bytes'],flush=True)
-            metadata.append(row)
-          (D/'sources.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
-          print('DOWNLOADED',sum(r['status']=='downloaded' for r in metadata),'OF',len(metadata))
+                with get('https://commons.wikimedia.org/w/api.php?'+urllib.parse.urlencode(params)) as r:dat=json.load(r)
+                pages=sorted(dat.get('query',{}).get('pages',[]),key=lambda p:p.get('index',99))
+                for p in pages:
+                  title=p.get('title','')
+                  if not re.search(r'\.(jpg|jpeg|png)$',title,re.I):continue
+                  if any(x in title.lower() for x in ['history of','the book','quarterly','text book','album','sketch','diagram','schematic','plan ', 'map ','flag of']):continue
+                  ii=(p.get('imageinfo') or [{}])[0]
+                  if ii.get('width',0)<450 or ii.get('height',0)<300:continue
+                  u=ii.get('thumburl') or ii.get('url')
+                  if not u:continue
+                  try:
+                    found=photo(n,title,u,ii.get('descriptionurl',''),'Wikimedia Commons');break
+                  except Exception:pass
+                if found:break
+              except Exception as e:print(n,str(e)[:90],flush=True)
+            if found: rows.append(found);print('OK',n,found['title'],flush=True)
+            else:print('MISS',n,q,flush=True)
+          for key,name in exact.items():
+            n=int(key)
+            u='https://raw.githubusercontent.com/ding0t/bible_studies/main/docs/content/assets/img/archaeology/'+name
+            try:
+              row=photo(n,name,u,'https://github.com/ding0t/bible_studies/blob/main/docs/content/assets/img/archaeology/'+name,'verified archived image');rows.append(row);print('EXACT',n,flush=True)
+            except Exception as e:print('EXACT MISS',n,e,flush=True)
+          (D/'sources.json').write_text(json.dumps(rows,indent=2,ensure_ascii=False),encoding='utf-8')
           PY
-          python /tmp/fetch.py
+          python /tmp/correct.py
       - uses: actions/upload-artifact@v4
         with:
-          name: archaeology-photos-real
-          path: photos/
+          name: archaeology-corrected
+          path: corrections/
           retention-days: 1
