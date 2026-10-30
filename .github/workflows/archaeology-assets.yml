@@ -1,0 +1,17 @@
+name: Image download (temporary)
+on: [push]
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Cyrus cylinder image
+        run: |
+          mkdir -p real_images
+          curl -fL --retry 3 -A "Museum Bible research" -o real_images/36.jpg https://raw.githubusercontent.com/ding0t/bible_studies/main/docs/content/assets/img/archaeology/cyrus-cylinder.jpg
+          file real_images/36.jpg
+          test $(wc -c < real_images/36.jpg) -gt 10000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: real-archaeology
+          path: real_images/
+          retention-days: 1
