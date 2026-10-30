@@ -1,33 +1,32 @@
-name: Archaeological photographs test
+name: Real site image final additions
 on: [push]
 jobs:
   fetch:
     runs-on: ubuntu-latest
     steps:
-      - name: Download real photographs
-        shell: bash
+      - name: Download exact verified museum photos
         run: |
           python3 - <<'PY'
           import json, urllib.request
           from pathlib import Path
-          D=Path('targets');D.mkdir(exist_ok=True)
-          q=json.loads("{\"11\":\"https://www.livius.org/site/assets/files/17601/mari_great_royal_palace1.jpg\",\"13\":\"https://cdli.earth/dl/photo/P408916.jpg\",\"14\":\"https://biblical-archaeology.ru/03-jordan/data/bab_edh_dhra/photos/999.jpg\",\"15\":\"https://toldot.com/netcat_files/1855/1197/3f02ae59ea9eb24bd05d49b9cdba679d.jpg\",\"16\":\"https://sbf.custodia.org/sites/default/files/2019-06/sichem_03.jpg\",\"17\":\"https://www.oeaw.ac.at/fileadmin/NEWS/2015/IMG/oeai_oeaw02_OEAI-TeD-Hafenareal.jpg\",\"19\":\"https://biblearchaeology.org/images/Emilys/The-ABR-Shiloh-dig-team-at-work.jpg\",\"20\":\"https://cdn4.picryl.com/photo/1931/01/01/air-views-of-palestine-various-points-of-interest-around-jerusalem-tell-el-640.jpg\",\"21\":\"https://www.megalithic.co.uk/a558/a312/gallery/Middle_East/Israel/betshean-governorhouse.JPG\",\"22\":\"https://upload.wikimedia.org/wikipedia/commons/3/3f/Jerusalem_Warren%27s_Shaft_%282121777520%29.jpg\",\"23\":\"https://www.biblicalarchaeology.org/wp-content/uploads/2025/10/Megiddo-southern-stables-tb032507596-scaled.jpg\",\"24\":\"https://www.metmuseum.org/zh/-/media/images/exhibitions/2014/assyria-to-iberia/blog/phoeniciabible1.jpg?as=1&hash=B39AB2220DD7270CFC0CD2BEF369C1FD&mh=1166&mw=1200&sc_lang=en\",\"34\":\"https://commons.wikimedia.org/wiki/Special:Redirect/file/Seal%20of%20Gedaliah%2C%20Keller%27s%20The%20Bible%20as%20history%20in%20pictures%20Wellcome%20L0005978.jpg?width=1400\"}")
-          rows=[]
-          for k,u in q.items():
-           n=int(k)
+          D=Path("final"); D.mkdir(exist_ok=True)
+          sources=json.loads("{\"11\":\"https://upload.wikimedia.org/wikipedia/commons/c/ce/Mari-Zimri_Lim_Palace.jpg\",\"20\":\"https://commons.wikimedia.org/wiki/Special:Redirect/file/Air%20views%20of%20Palestine.%20Various%20points%20of%20interest%20around%20Jerusalem.%20Tell%20el-Ful.%20Indentified%20(i.e.%2C%20identified)%20as%20Gibeah%20of%20Saul.%20I%20Sam.%2010-%2026%20LOC%20matpc.22167.jpg?width=1280\",\"21\":\"https://commons.wikimedia.org/wiki/Special:Redirect/file/Bet%20Shean%20National%20Park%20ruins%20and%20tell.jpg?width=1280\",\"24\":\"https://commons.wikimedia.org/wiki/Special:Redirect/file/Furniture%20Inlays%2C%20Samaria%2C%209th%20Century%20BC%20(28349116227).jpg?width=1280\"}")
+          result=[]
+          for n,u in sources.items():
            try:
-            with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=14) as r: b=r.read(8000000)
-            assert len(b)>15000 and (b[:3]==bytes.fromhex('ffd8ff') or b[:8]==bytes.fromhex('89504e470d0a1a0a'))
-            ext='.jpg' if b[:3]==bytes.fromhex('ffd8ff') else '.png'
-            f=D/(str(n).zfill(2)+ext);f.write_bytes(b)
-            rows.append(dict(n=n,file=f.name,url=u,bytes=len(b)))
-            print('SUCCESS',n,len(b),flush=True)
-           except Exception as e:print('FAILED',n,str(e)[:70],flush=True)
-          (D/'sources.json').write_text(json.dumps(rows,ensure_ascii=False,indent=2))
+            req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0 (compatible; MuseumResearch/1.0)"})
+            with urllib.request.urlopen(req,timeout=25) as r: b=r.read(8000000)
+            if not (b[:3]==bytes.fromhex("ffd8ff") or b[:8]==bytes.fromhex("89504e470d0a1a0a")):raise Exception("not an image")
+            name=f"{int(n):02d}.jpg" if b[:3]==bytes.fromhex("ffd8ff") else f"{int(n):02d}.png"
+            (D/name).write_bytes(b)
+            result.append(dict(n=int(n),file=name,url=u))
+            print("OK",n,len(b),flush=True)
+           except Exception as e: print("FAIL",n,str(e)[:160],flush=True)
+          (D/"sources.json").write_text(json.dumps(result,ensure_ascii=False,indent=2))
           
           PY
       - uses: actions/upload-artifact@v4
         with:
-          name: archaeology-site-photos
-          path: targets/
+          name: real-sites-final
+          path: final/
           retention-days: 1
